@@ -24,6 +24,6 @@ class CreateUser(BaseModel):
 
 
 class CreateReview(BaseModel):
-    product_id: int
+    product_slug: str
     rating_id: int
     comment: str

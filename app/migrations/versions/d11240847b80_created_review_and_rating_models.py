@@ -1,8 +1,8 @@
-"""Create Review and Rating models attempt_2
+"""Created Review and Rating models
 
-Revision ID: 84a8c37efdc7
-Revises: e6247b4949b4
-Create Date: 2025-01-27 16:59:55.108528
+Revision ID: d11240847b80
+Revises: 6074b4f5e63d
+Create Date: 2025-01-28 15:52:09.735774
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '84a8c37efdc7'
-down_revision: Union[str, None] = 'e6247b4949b4'
+revision: str = 'd11240847b80'
+down_revision: Union[str, None] = '6074b4f5e63d'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

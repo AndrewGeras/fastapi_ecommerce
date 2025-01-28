@@ -33,3 +33,4 @@ class Rating(Base):
 
     user = relationship('User', back_populates='rating')
     product = relationship('Product', back_populates='rating')
+    reviews = relationship('Review', back_populates='rating')
