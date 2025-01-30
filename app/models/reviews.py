@@ -9,6 +9,7 @@ from app.backend.db import Base
 
 class Review(Base):
     __tablename__ = 'reviews'
+    __table_args__ = (UniqueConstraint('user_id', 'product_id', name='uc_review_user_product'),)
 
     id = Column(Integer, primary_key=True, index=True)
     comment = Column(String)
@@ -25,7 +26,7 @@ class Review(Base):
 
 class Rating(Base):
     __tablename__ = 'ratings'
-    __table_args__ = (UniqueConstraint('user_id', 'product_id', name='uix_user_product'),)
+    __table_args__ = (UniqueConstraint('user_id', 'product_id', name='uc_rating_user_product'),)
 
     id = Column(Integer, primary_key=True, index=True)
     grade = Column(Integer)

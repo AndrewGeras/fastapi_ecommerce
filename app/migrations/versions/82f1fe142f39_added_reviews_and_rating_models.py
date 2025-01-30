@@ -1,8 +1,8 @@
 """Added Reviews and Rating models
 
-Revision ID: 69aef9d7d76d
+Revision ID: 82f1fe142f39
 Revises: c92cbd3d54a3
-Create Date: 2025-01-30 14:15:25.859486
+Create Date: 2025-01-30 18:26:58.221429
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '69aef9d7d76d'
+revision: str = '82f1fe142f39'
 down_revision: Union[str, None] = 'c92cbd3d54a3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -29,7 +29,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('user_id', 'product_id', name='uix_user_product')
+    sa.UniqueConstraint('user_id', 'product_id', name='uc_rating_user_product')
     )
     op.create_index(op.f('ix_ratings_id'), 'ratings', ['id'], unique=False)
     op.create_table('reviews',
@@ -43,7 +43,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['rating_id'], ['ratings.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id', 'product_id', name='uc_review_user_product')
     )
     op.create_index(op.f('ix_reviews_id'), 'reviews', ['id'], unique=False)
     # ### end Alembic commands ###
