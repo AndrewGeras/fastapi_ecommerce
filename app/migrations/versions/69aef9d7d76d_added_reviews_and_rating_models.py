@@ -1,8 +1,8 @@
-"""Created Review and Rating models
+"""Added Reviews and Rating models
 
-Revision ID: d11240847b80
-Revises: 6074b4f5e63d
-Create Date: 2025-01-28 15:52:09.735774
+Revision ID: 69aef9d7d76d
+Revises: c92cbd3d54a3
+Create Date: 2025-01-30 14:15:25.859486
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'd11240847b80'
-down_revision: Union[str, None] = '6074b4f5e63d'
+revision: str = '69aef9d7d76d'
+down_revision: Union[str, None] = 'c92cbd3d54a3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -28,17 +28,18 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id', 'product_id', name='uix_user_product')
     )
     op.create_index(op.f('ix_ratings_id'), 'ratings', ['id'], unique=False)
     op.create_table('reviews',
     sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('comment', sa.String(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('comment_date', sa.DateTime(), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=True),
     sa.Column('product_id', sa.Integer(), nullable=True),
     sa.Column('rating_id', sa.Integer(), nullable=True),
-    sa.Column('comment', sa.String(), nullable=True),
-    sa.Column('comment_date', sa.DateTime(), nullable=True),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['rating_id'], ['ratings.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),

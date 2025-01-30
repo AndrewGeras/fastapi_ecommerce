@@ -49,7 +49,7 @@ async def create_product(db: Annotated[AsyncSession, Depends(get_db)],
                                             image_url=create_product.image_url,
                                             stock=create_product.stock,
                                             category_id=create_product.category,
-                                            rating=0.0,
+                                            # rating=0.0,
                                             slug=slugify(create_product.name),
                                             supplier_id=get_user.get("id")))
     await db.commit()
