@@ -1,7 +1,8 @@
 from typing import Annotated
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,44 +10,23 @@ from app.backend.db_depends import get_db
 from app.schemas import CreateReview
 from app.models import User, Product, Review, Rating
 from .auth import get_current_user
+from app.services.service import update_rating, get_object_or_404, get_objects_or_404
 
 router = APIRouter(prefix='/reviews', tags=['reviews'])
 
 
 @router.get('/')
 async def all_reviews(db: Annotated[AsyncSession, Depends(get_db)]):
-    reviews = await db.scalars(select(Review).where(Review.is_active == True))
-    if reviews:
-        return reviews.all()
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="There are no reviews"
-    )
+    reviews = await get_objects_or_404(db, Review, (Review.is_active == True,))
+    return reviews
 
 
 @router.get('/{product_slug}')
 async def products_reviews(db: Annotated[AsyncSession, Depends(get_db)],
                            product_slug: str):
-    product = await db.scalar(select(Product).where(Product.slug == product_slug,
-                                                    Product.is_active == True))
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This product is not found"
-        )
-
-    reviews_set = await db.scalars(
-        select(Review).where(Review.product_id == product.id, Review.is_active == True)
-    )
-    reviews = reviews_set.all()
-
-    if reviews:
-        return reviews
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="There's no reviews"
-    )
+    product = await get_object_or_404(db, Product, (Product.slug == product_slug, Product.is_active == True))
+    reviews = await get_objects_or_404(db, Review, (Review.product_id == product.id, Review.is_active == True))
+    return reviews
 
 
 @router.post('/{product_slug}')
@@ -54,59 +34,52 @@ async def add_review(db: Annotated[AsyncSession, Depends(get_db)],
                      product_slug: str,
                      review: CreateReview,
                      get_user: Annotated[dict, Depends(get_current_user)]):
-
+    #  проверяем является ли пользователь покупателем
     if not get_user.get("is_customer"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only customers can leave reviews"
         )
 
-    product = await db.scalar(select(Product).where(Product.slug == product_slug,
-                                                    Product.is_active == True))
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This product is not found"
-        )
+    #  получаем из базы данных объект товара по слагу
+    product = await get_object_or_404(db, Product, (Product.slug == product_slug, Product.is_active == True))
 
+    #  значения полей нового рейтинга для занесения в БД
     new_rating = {'grade': review.rating_grade,
                   'user_id': get_user.get('id'),
                   'product_id': product.id}
 
+    #  Запись с рейтингом либо заносится впервые, либо обновляется при наличии в БД и при совпадении пользователя и товара
     await db.execute(
         insert(Rating).values(new_rating).on_conflict_do_update(constraint='uc_rating_user_product',
                                                                 set_={'grade': new_rating['grade'],
                                                                       'is_active': True}))
     await db.commit()
 
-    rating = await db.scalar(select(Rating).where(Rating.user_id == get_user.get('id'),
-                                                  Rating.product_id == product.id,
-                                                  ))
+    #  Получаем объект рейтинга из БД
+    rating = await get_object_or_404(db, Rating,
+                                     (Rating.user_id == get_user.get('id'), Rating.product_id == product.id))
+
+    #  значения полей нового отзыва для занесения в БД
     new_review = {'comment': review.comment,
                   'user_id': get_user.get('id'),
                   'product_id': product.id,
                   'rating_id': rating.id}
+
+    #  Запись с отзывом либо заносится впервые, либо обновляется при наличии в БД и при совпадении пользователя и товара
     await db.execute(
         insert(Review).values(new_review).on_conflict_do_update(constraint='uc_review_user_product',
                                                                 set_={'comment': new_review['comment'],
                                                                       'rating_id': new_review['rating_id'],
+                                                                      'comment_date': datetime.now(),
                                                                       'is_active': True})
     )
     await db.commit()
 
-    ratings = await db.scalars(select(Rating).where(Rating.product_id == product.id,
-                                                    Rating.is_active == True))
-    rating_list = [rating.grade for rating in ratings.all()]
-    if rating_list:
-        await db.execute(
-            update(Product).where(Product.id == product.id).values(rating=round(sum(rating_list) / len(rating_list), 1))
-        )
-    else:
-        await db.execute(
-            update(Product).where(Product.id == product.id).values(rating=0.0)
-        )
-    await db.commit()
+    #  обновляем рейтинг товара в БД
+    await update_rating(db, product.id)
 
+    #  возвращаем сообщение об успешном размещении отзыва
     return {
         'status_code': status.HTTP_201_CREATED,
         'transaction': 'Successful'
@@ -118,47 +91,29 @@ async def delete_reviews(db: Annotated[AsyncSession, Depends(get_db)],
                          product_slug: str,
                          review_id: int,
                          get_user: Annotated[dict, Depends(get_current_user)]):
+    #  проверяем является ли пользователь администратором
     if not get_user.get("is_admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin can delete review"
         )
 
-    product = await db.scalar(select(Product).where(Product.slug == product_slug,
-                                                    Product.is_active == True))
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This product is not found"
-        )
+    #  получаем из базы данных объект товара по слагу
+    product = await get_object_or_404(db, Product, (Product.slug == product_slug, Product.is_active == True))
 
-    review = await db.scalar(select(Review).where(Review.id == review_id, Review.is_active == True))
+    #  получаем из базы данных объект отзыва по идентификатору
+    review = await get_object_or_404(db, Review, (Review.id == review_id, Review.is_active == True))
 
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This review is not found"
-        )
-
+    #  деактивируем отзыв и соответствующую отметку рейтинга
     await db.execute(update(Review).where(Review.id == review_id).values(is_active=False))
     await db.execute(update(Rating).where(Rating.id == review.rating_id,
                                           ).values(is_active=False))
-
     await db.commit()
 
-    ratings = await db.scalars(select(Rating).where(Rating.product_id == product.id,
-                                                    Rating.is_active == True))
-    rating_list = [rating.grade for rating in ratings.all()]
-    if rating_list:
-        await db.execute(
-            update(Product).where(Product.id == product.id).values(rating=round(sum(rating_list) / len(rating_list), 1))
-        )
-    else:
-        await db.execute(
-            update(Product).where(Product.id == product.id).values(rating=0.0)
-        )
-    await db.commit()
+    #  обновляем рейтинг товара в БД
+    await update_rating(db, product.id)
 
+    #  возвращаем сообщение об успешном удалении отзыва
     return {
         'status_code': status.HTTP_200_OK,
         'transaction': 'Successful'
