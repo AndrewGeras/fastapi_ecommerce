@@ -6,6 +6,7 @@ from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 from app.backend.db_depends import get_db
 from app.schemas import CreateReview
 from app.models import User, Product, Review, Rating
@@ -18,7 +19,21 @@ router = APIRouter(prefix='/reviews', tags=['reviews'])
 @router.get('/')
 async def all_reviews(db: Annotated[AsyncSession, Depends(get_db)]):
     reviews = await get_objects_or_404(db, Review, (Review.is_active == True,))
-    return reviews
+
+    #  Получаем список всех отзывов со связвнными с ними объектами товаров, пользователей и рейтингов
+    objects = [
+        {'review': review,
+         'product': await get_object_or_404(db, Product, (Product.id == review.product_id,)),
+         'user': await get_object_or_404(db, User, (User.id == review.user_id,)),
+         'rating': await get_object_or_404(db, Rating, (Rating.id == review.rating_id,))}
+        for review in reviews]
+
+    return [{'product_slug': obj['product'].slug,
+             'user': obj['user'].username,
+             'comment_date': obj['review'].comment_date,
+             'comment': obj['review'].comment,
+             'rating': obj['rating'].grade} for obj in objects]
+
 
 
 @router.get('/{product_slug}')
@@ -26,7 +41,18 @@ async def products_reviews(db: Annotated[AsyncSession, Depends(get_db)],
                            product_slug: str):
     product = await get_object_or_404(db, Product, (Product.slug == product_slug, Product.is_active == True))
     reviews = await get_objects_or_404(db, Review, (Review.product_id == product.id, Review.is_active == True))
-    return reviews
+
+    #  Получаем список отзывов по товару со связвнными с ними объектами пользователей и рейтингов
+    objects = [
+        {'review': review,
+         'user': await get_object_or_404(db, User, (User.id == review.user_id,)),
+         'rating': await get_object_or_404(db, Rating, (Rating.id == review.rating_id,))}
+        for review in reviews]
+
+    return [{'user': obj['user'].username,
+             'comment_date': obj['review'].comment_date,
+             'comment': obj['review'].comment,
+             'rating': obj['rating'].grade} for obj in objects]
 
 
 @router.post('/{product_slug}')
@@ -106,8 +132,7 @@ async def delete_reviews(db: Annotated[AsyncSession, Depends(get_db)],
 
     #  деактивируем отзыв и соответствующую отметку рейтинга
     await db.execute(update(Review).where(Review.id == review_id).values(is_active=False))
-    await db.execute(update(Rating).where(Rating.id == review.rating_id,
-                                          ).values(is_active=False))
+    await db.execute(update(Rating).where(Rating.id == review.rating_id).values(is_active=False))
     await db.commit()
 
     #  обновляем рейтинг товара в БД
